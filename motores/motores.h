@@ -1,3 +1,5 @@
+#include <Servo.h>
+
 /* motorsUp para iniciar los motores facilmente */
 void motorsUp(){
   //Setup Channel A
@@ -8,9 +10,17 @@ void motorsUp(){
   pinMode(13, OUTPUT); //Initiates Motor Channel B pin
   pinMode(8, OUTPUT);  //Initiates Brake Channel B pin
 }
+
+/* He hecho esta funcion para intentar que paren loa motores al mismo tiempo, 
+ me parece que da lo mismo que poner motorR(0) y motorL(0)*/
+void motorsStop(){
+  digitalWrite(8, HIGH);
+  digitalWrite(9, HIGH);
+  
+}
+
 /* motorR recibe un double, positivo o negativo para ir hacia delante o hacia atrás.
 Si recibe 0 activa el freno, si recibe 0.1 se queda en pto muerto */
-
 void motorR(double a){
   double b;
   if(a==0){
@@ -25,7 +35,7 @@ void motorR(double a){
       a=-100;
     }
     b=255*(-a/100);
-    digitalWrite(9, LOW); // Desactiva el freno
+    digitalWrite(9, HIGH); // Desactiva el freno
     digitalWrite(12, LOW); // Marcha atras
     analogWrite(3, b);   //Spins the motor on Channel A at full speed
   }
@@ -40,11 +50,12 @@ void motorR(double a){
     }
 
   }
+  
 /* motorL hace lo mismo que motorR.
   La constatne c sirve para calibrar el motor*/
 void motorL(double a){
   double b;
-  const double c=0.75;
+  const double c=0.65;
   if(a==0){
     digitalWrite(8, HIGH); // Activa el freno
   }
