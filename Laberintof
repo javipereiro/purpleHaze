@@ -1,0 +1,220 @@
+//PINES MOTORES
+
+int PWM_A=11; //Motor izquierda Da la potencia a los motores
+int PWM_B=3; // motor derecha
+int DIR_A=13; // motor derecha Da la direccion al motor
+int DIR_B=12;// motor izquierda
+
+//PINES SENSORES
+
+//CNY70
+/*
+  
+int cny[5];
+int CNY0 = 2; // EL DE LA IZQUIERDA DEL TODO
+int CNY1 = 3;
+int CNY2 = 4;
+int CNY3 = 5;
+int CNY4 = 6; // EL DE LA DERECHA DEL TODO
+
+*/
+
+
+//SHARP 
+/*
+int SHARP0 = A0; //izquierda
+int SHARP1 = A1; // centro
+int SHARP2 = A2; // derecha
+*/
+
+//Variables necesarias
+
+//Umbrales 
+int UmbralInfRecto;
+int UmbralSupRecto;
+int UmbralGiroDer;
+int UmbralGiroIzq;
+
+//Velocidad programar los giros
+int VelGiroIzq_I;
+int VelGiroIzq_D;
+int VelGiroDer_I;
+int VelGiroDer_D;
+
+//Para guardar valores anteriores de los sharp(al final me decidí a  crear un last input por notación más que nada)
+
+int SharpIAnt;
+int SharpCAnt;
+int SharpDAnt;
+
+
+//Controlador PID (en caso de que haga 2 PID usare para el segundo los nombres acabados en 2)(todo redondeado a int ya que no se si analogWrite admite decimales)
+int SetPoint;//valor en los Sharp con el robot exactamente en el medio
+int Output; //salida PID
+int Output2;
+int Input; // Entrada, valor de los sharp
+int Input2; 
+int lastInput=0;//Para guardar los valores pasados
+int lastInput2=0;
+int ITerm=0; //Término integral
+int ITerm2=0;
+int Kp;
+int Ki;
+int Kd;
+int error; // Setpoiunt-input
+int error2;
+int errorAnt;
+int errorAnt2;
+int outMax=255;//Valor máximo del analogwrite segun internet, comprobar que la velocidad va a tope y si no hay q volver a mirar
+int outMaxRead=1023;
+int outMin=0; //Valor mínimo motores
+
+//En caso de que haya problemas por sobremuestreo utilizar esto como cerrojo
+/*
+ * unsigned long lastTime;
+ * int SampleTime=100;
+ */
+
+void setup() {
+
+  //CONFIGURACION PINES MOTORES
+  
+    pinMode (DIR_A, OUTPUT); // Direction pin on channel A
+    pinMode (DIR_B, OUTPUT);
+    pinMode(PWM_A, OUTPUT);
+    pinMode(PWM_B,OUTPUT);
+
+  //CONFIGURACION PINES CNY70(hará falta para la prueba de laberinto con línea, con uno debería bastar)
+
+      /*
+   pinMode (CNY0, INPUT);
+   pinMode (CNY1, INPUT);
+   pinMode (CNY2, INPUT);
+   pinMode (CNY3, INPUT);
+   pinMode (CNY4, INPUT);
+    */
+    
+  //LECTURA DE VALORES POR PUERTO SERIE
+  Serial.begin(9600);
+}
+
+//Método principal desde el que se llamaran al resto(giros y mediavuelta)(Habrá problemas con valores anteriores guardados a la hora de volver al controlador????)
+//De ser así inicializar a un valor al llamar a los giros y media vuelta  las variables de guardado de valores anteriores
+
+void loop() {
+
+  //valores de los sharp (analogRead devuelve de 0 a 1023)
+    int SharpI = analogRead(A0);
+    int SharpC = analogRead(A1);
+    int SharpD = analogRead(A2);
+
+  //inputs del controlador
+    int input = analogRead(A0);
+    int input2 = analogRead(A2);
+
+  //Girar izquierda
+  if((SharpI<UmbralInfRecto)){
+    analogWrite (PWM_A, 0);//para evitar que derrape paramos brevemente los motores antes de entrar al método
+    analogWrite (PWM_B, 0);
+    giroIzquierda();    
+  }
+  
+  //Ir centro del laberinto
+  //Modificar velocidad del motor según lo próximo que este a la pared
+    if(((SharpI>UmbralInfRecto)&&(SharpI<UmbralSupRecto))&&((SharpD>UmbralInfRecto)&&(SharpD<UmbralSupRecto))){
+
+      //calculamos los errores
+          error= SetPoint-Input;
+          error2=SetPoint-Input2;
+
+      //suma acumulada del término integral(entiendo que si error es negativo que puede ser , restará en vez de sumar, si el rollo no funciona así hay que cambiar)
+          ITerm += (Ki*error);
+          ITerm2 += (Ki*error2);
+
+      //normalizamos este término
+
+       if(ITerm> outMaxRead){ITerm=outMaxRead;}
+       if(ITerm2> outMaxRead){ITerm2=outMaxRead;}
+       if(ITerm< outMin){ITerm=outMin;}
+       if(ITerm2< outMin){ITerm2=outMin;} 
+
+      //Término derivativo
+
+      int  dInput = (Input - lastInput);
+      int dInput2 = (Input2 - lastInput2);
+
+      //Función salida del PID
+
+      Output=Kp*error +ITerm - Kd*dInput;
+      Output2=Kp*error +ITerm - Kd*dInput2;
+
+      //Convertimos ya que analogRead devuelve de [0,1023] y analogWrite[0,255]
+
+       float OutputFloat = (Output*255)/1023;
+       float OutputFloat2 = (Output*255)/1023;
+
+       Output = (int) OutputFloat;
+       Output2 = (int) OutputFloat2;
+
+       //Normalizamos de nuevo
+
+       if(Output>outMax){Output=outMax;}
+       if(Output2>outMax){Output2=outMax;}
+              
+       if(Output<outMin){Output=outMin;}
+       if(Output2<outMin){Output2=outMin;}
+
+           //Se acerca o se aleja,velocidad motor respecto a sharp
+
+          //Falta ajustar las velocidades para que sean altas pero pàra eso hace falta saber el valor de del sharp en el medio, de hay calcular outputs  para los extremos de error y luego cuandoi ya tengamos eso sacar las ks probando
+/*
+ * Invierto los outputs dado que el error sera mayor que 0 cuandop se aleje de la pared y por tanto habrá que darle mas chicha al izquierdo
+ */
+          
+        analogWrite (PWM_A, Output2);
+        analogWrite (PWM_B, Output);
+
+        //Guardamos inputs
+
+        lastInput=Input;
+        lastInput2=Input2;
+        
+    
+    }
+
+  //Girar derecha
+  if(SharpD<UmbralInfRecto){
+    analogWrite (PWM_A, 0);//para evitar que derrape paramos brevemente los motores antes de entrar al método
+    analogWrite (PWM_B, 0);
+    giroDerecha();
+  }
+
+  
+    
+  //Media vuelta
+  if((SharpI>400)&&(SharpC>400)&&(SharpD>400)){
+    analogWrite (PWM_A, 0);//para evitar que derrape paramos brevemente los motores antes de entrar al método
+    analogWrite (PWM_B, 0);
+    mediaVuelta();
+  }
+  
+   SharpIAnt = SharpI;
+   SharpCAnt = SharpC;
+   SharpDAnt = SharpD;
+    
+}
+
+void giroIzquierda(){
+  
+}
+
+
+void giroDerecha(){
+  
+}
+
+void mediaVuelta(){
+  
+}
+
+
